@@ -121,12 +121,12 @@ function renderRate() {
   const rate = latest.rateLimits;
   const primary = rate.primary || {};
   const secondary = rate.secondary || {};
-  const primaryUsed = Number(latest.maxPrimaryUsed ?? primary.used_percent ?? 0);
-  const secondaryUsed = Number(latest.maxSecondaryUsed ?? secondary.used_percent ?? 0);
+  const primaryUsed = Number(latest.primaryUsed ?? latest.maxPrimaryUsed ?? primary.used_percent ?? 0);
+  const secondaryUsed = Number(latest.secondaryUsed ?? latest.maxSecondaryUsed ?? secondary.used_percent ?? 0);
 
   setText(
     "rateContext",
-    `${rate.plan_type || "unknown plan"} · ${latest.day} · max in current reset window · latest ${Number(latest.primaryLatestUsed ?? primary.used_percent ?? 0).toFixed(1)}%/${Number(latest.secondaryLatestUsed ?? secondary.used_percent ?? 0).toFixed(1)}%`
+    `${rate.plan_type || "unknown plan"} · ${latest.day} · current reset window peak`
   );
   setText("primaryUsed", `${primaryUsed.toFixed(1)}%`);
   setText("secondaryUsed", `${secondaryUsed.toFixed(1)}%`);

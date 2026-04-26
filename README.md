@@ -19,13 +19,15 @@
 
 ![Codex Token Monitor Menu Bar](docs/images/menu-bar-compact.png)
 
+![Codex Token Monitor Menu Dropdown](docs/images/menu-bar-dropdown.png)
+
 ## 功能
 
 - 按今天、近 7 天、近 30 天、本月、全部统计 token
 - 估算输入、缓存输入、输出 token 的费用
 - 使用事件时间归因，避免按 session 创建日期误算每日用量
 - 展示 cache hit rate、reasoning output tokens、活跃 session 数
-- 展示 5h primary 和 7d secondary 额度窗口
+- 展示 5h primary 和 1w secondary 额度窗口峰值
 - macOS 菜单栏实时显示今日估算费用、total tokens、5h 和 1w 用量
 - 菜单栏 quota 文字按 5h primary / 1w secondary 使用率从薄荷绿渐变到玫红
 - 支持 LaunchAgent，开机后自动启动 dashboard 和菜单栏
@@ -74,6 +76,8 @@ $70/85.7M/84%/54%
 ```text
 薄荷绿 -> 蜂蜜黄 -> 蜜桃橙 -> 玫红
 ```
+
+展开下拉菜单后，会同时看到 `Today`、`Last 7d`、`Last 30d`、`Month` 的 token 和预估价格，以及 `5h primary` / `1w secondary` 的当前重置窗口峰值。
 
 如果想换成别的模型，例如 `gpt-5.4`：
 

@@ -544,6 +544,8 @@ function buildScan() {
       day: latestRateEvent.day || latestRateEvent.sessionDay,
       file: latestRateEvent.file,
       timestamp: latestRateEvent.timestamp,
+      primaryUsed: primaryMax,
+      secondaryUsed: secondaryMax,
       primaryLatestUsed: Number(latestRateEvent.rate.primary?.used_percent || 0),
       secondaryLatestUsed: Number(latestRateEvent.rate.secondary?.used_percent || 0),
       maxPrimaryUsed: primaryMax,

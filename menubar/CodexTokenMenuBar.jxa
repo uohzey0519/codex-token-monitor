@@ -81,6 +81,13 @@ function wholePercent(value) {
   return String(Math.round(number(value)));
 }
 
+function pricingLabel(value) {
+  var text = String(value || "").trim();
+  if (!text || text === "undefined" || text === "null") text = pricingModelId || "gpt-5.5";
+  if (text.indexOf("gpt-") === 0) return text.replace(/^gpt-/, "GPT-");
+  return text;
+}
+
 function dollars(value, short) {
   value = number(value);
   if (short || value >= 100) return "$" + trim(value);
@@ -200,11 +207,11 @@ function updatePricingLabel(root) {
   var models = root.pricing || [];
   for (var index = 0; index < models.length; index += 1) {
     if (models[index].id === pricingModelId) {
-      pricingModelLabel = models[index].label || pricingModelId;
+      pricingModelLabel = pricingLabel(models[index].label || models[index].id);
       return;
     }
   }
-  pricingModelLabel = pricingModelId;
+  pricingModelLabel = pricingLabel(pricingModelId);
 }
 
 function item(title, action, key) {
@@ -226,8 +233,8 @@ function updateMenu(root, last7, today, last30, month) {
 
   var rate = root.latestRate || null;
   if (rate) {
-    menu.addItem(item("5h primary: " + wholePercent(rate.maxPrimaryUsed) + "% max / " + wholePercent(rate.primaryLatestUsed) + "% latest"));
-    menu.addItem(item("1w secondary: " + wholePercent(rate.maxSecondaryUsed) + "% max / " + wholePercent(rate.secondaryLatestUsed) + "% latest"));
+    menu.addItem(item("5h primary: " + wholePercent(rate.primaryUsed) + "%"));
+    menu.addItem(item("1w secondary: " + wholePercent(rate.secondaryUsed) + "%"));
   } else {
     menu.addItem(item("Rate limit: no snapshot"));
   }
@@ -248,8 +255,8 @@ function updateStatus() {
     var last30 = rangeSummary(root, "last30", "Last 30d");
     var month = rangeSummary(root, "currentMonth", "Month");
     var rate = root.latestRate || {};
-    var primaryUsed = number(rate.maxPrimaryUsed);
-    var secondaryUsed = number(rate.maxSecondaryUsed);
+    var primaryUsed = number(rate.primaryUsed !== undefined ? rate.primaryUsed : rate.maxPrimaryUsed);
+    var secondaryUsed = number(rate.secondaryUsed !== undefined ? rate.secondaryUsed : rate.maxSecondaryUsed);
     var baseTitle = barDollars(today.cost) + "/" + compact(today.tokens) + "/";
     var primaryText = wholePercent(primaryUsed) + "%";
     var middle = "/";
