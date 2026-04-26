@@ -544,6 +544,10 @@ function buildScan() {
       day: latestRateEvent.day || latestRateEvent.sessionDay,
       file: latestRateEvent.file,
       timestamp: latestRateEvent.timestamp,
+      source: "session token_count.rate_limits",
+      observedAgeSeconds: latestRateEvent.timestamp
+        ? Math.max(0, Math.round((Date.now() - new Date(latestRateEvent.timestamp).getTime()) / 1000))
+        : null,
       primaryUsed: primaryMax,
       secondaryUsed: secondaryMax,
       primaryLatestUsed: Number(latestRateEvent.rate.primary?.used_percent || 0),
@@ -569,6 +573,8 @@ function buildScan() {
       generatedAt: new Date().toISOString(),
       generatedDay: today,
       scanDurationMs: Date.now() - startedAt,
+      cacheTtlMs: CACHE_TTL_MS,
+      refreshNote: "Rate limits are read from Codex session token_count snapshots.",
       sessionsRoot: SESSIONS_ROOT,
       fileCount: files.length,
       cacheEntries: fileCache.size

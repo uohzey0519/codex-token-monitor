@@ -87,7 +87,7 @@
           <div class="rate-grid">
             <div>
               <div class="bar-label">
-                <span>Primary</span>
+                <span id="primaryLabel">Primary</span>
                 <strong id="primaryUsed">0%</strong>
               </div>
               <div class="progress"><span id="primaryBar"></span></div>
@@ -95,7 +95,7 @@
             </div>
             <div>
               <div class="bar-label">
-                <span>Secondary</span>
+                <span id="secondaryLabel">Secondary</span>
                 <strong id="secondaryUsed">0%</strong>
               </div>
               <div class="progress"><span id="secondaryBar"></span></div>
@@ -108,7 +108,7 @@
           <div class="panel-title">
             <div>
               <h2>每日趋势</h2>
-              <p>近 31 个活跃日，双面板展示 token、费用和缓存命中率</p>
+              <p>近 31 个活跃日，tokens 与费用双轴，缓存命中率自适应小轴</p>
             </div>
           </div>
           <div id="trendChart" class="chart"></div>

@@ -1,9 +1,10 @@
 const state = {
   data: null,
-  modelId: "gpt-5.4",
+  modelId: "gpt-5.5",
   range: "last7",
   timer: null,
-  themeIndex: 0
+  themeIndex: 0,
+  refreshMs: 10_000
 };
 
 const themes = ["sage", "peach", "sky"];
@@ -59,6 +60,44 @@ function resetTime(epochSeconds) {
     hour: "2-digit",
     minute: "2-digit"
   });
+}
+
+function durationText(totalSeconds) {
+  const seconds = Math.max(0, Math.round(totalSeconds || 0));
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+
+  if (days >= 1) return `${days}d ${hours}h`;
+  if (hours >= 1) return `${hours}h ${minutes}m`;
+  if (minutes >= 1) return `${minutes}m`;
+  return `${seconds}s`;
+}
+
+function remainingUntil(epochSeconds) {
+  if (!epochSeconds) return "未知";
+  const seconds = epochSeconds - Date.now() / 1000;
+  return seconds <= 0 ? "已过期" : `剩余 ${durationText(seconds)}`;
+}
+
+function timeAgo(isoTimestamp) {
+  if (!isoTimestamp) return "未知时间";
+  const seconds = (Date.now() - new Date(isoTimestamp).getTime()) / 1000;
+  if (!Number.isFinite(seconds) || seconds < 0) return "刚刚";
+  if (seconds < 60) return `${Math.round(seconds)}s 前`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m 前`;
+  if (seconds < 86400) return `${Math.round(seconds / 3600)}h 前`;
+  return `${Math.round(seconds / 86400)}d 前`;
+}
+
+function windowLabel(minutes, fallback) {
+  const value = Number(minutes || 0);
+  if (value === 300) return `5h ${fallback}`;
+  if (value === 10080) return `1w ${fallback}`;
+  if (!value) return fallback;
+  if (value % 1440 === 0) return `${value / 1440}d ${fallback}`;
+  if (value % 60 === 0) return `${value / 60}h ${fallback}`;
+  return `${value}m ${fallback}`;
 }
 
 function renderControls() {
@@ -123,15 +162,18 @@ function renderRate() {
   const secondary = rate.secondary || {};
   const primaryUsed = Number(latest.primaryUsed ?? latest.maxPrimaryUsed ?? primary.used_percent ?? 0);
   const secondaryUsed = Number(latest.secondaryUsed ?? latest.maxSecondaryUsed ?? secondary.used_percent ?? 0);
+  const snapshotAge = timeAgo(latest.timestamp);
 
   setText(
     "rateContext",
-    `${rate.plan_type || "unknown plan"} · ${latest.day} · current reset window peak`
+    `${rate.plan_type || "unknown plan"} · session snapshot · ${snapshotAge}`
   );
-  setText("primaryUsed", `${primaryUsed.toFixed(1)}%`);
-  setText("secondaryUsed", `${secondaryUsed.toFixed(1)}%`);
-  setText("primaryReset", `reset ${resetTime(primary.resets_at)} · ${primary.window_minutes || "-"} min`);
-  setText("secondaryReset", `reset ${resetTime(secondary.resets_at)} · ${secondary.window_minutes || "-"} min`);
+  setText("primaryLabel", windowLabel(primary.window_minutes, "primary"));
+  setText("secondaryLabel", windowLabel(secondary.window_minutes, "secondary"));
+  setText("primaryUsed", `${Math.round(primaryUsed)}%`);
+  setText("secondaryUsed", `${Math.round(secondaryUsed)}%`);
+  setText("primaryReset", `${remainingUntil(primary.resets_at)} · ${resetTime(primary.resets_at)} 重置`);
+  setText("secondaryReset", `${remainingUntil(secondary.resets_at)} · ${resetTime(secondary.resets_at)} 重置`);
   setBar("primaryBar", primaryUsed);
   setBar("secondaryBar", secondaryUsed);
 }
@@ -142,6 +184,51 @@ function pathForPoints(points) {
     .join(" ");
 }
 
+function smoothPath(points) {
+  if (points.length < 3) return pathForPoints(points);
+  const commands = [`M${points[0].x.toFixed(2)},${points[0].y.toFixed(2)}`];
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const current = points[index];
+    const next = points[index + 1];
+    const midX = (current.x + next.x) / 2;
+    commands.push(
+      `C${midX.toFixed(2)},${current.y.toFixed(2)} ${midX.toFixed(2)},${next.y.toFixed(2)} ${next.x.toFixed(2)},${next.y.toFixed(2)}`
+    );
+  }
+  return commands.join(" ");
+}
+
+function niceMax(value) {
+  const raw = Math.max(1, Number(value || 0));
+  const power = 10 ** Math.floor(Math.log10(raw));
+  const normalized = raw / power;
+  const nice = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+  return nice * power;
+}
+
+function axisTicks(max, count = 4) {
+  const top = niceMax(max);
+  return Array.from({ length: count + 1 }, (_, index) => (top / count) * index);
+}
+
+function rateBounds(values) {
+  const valid = values.filter((value) => Number.isFinite(value));
+  if (!valid.length) return { min: 0, max: 1 };
+  const min = Math.min(...valid);
+  const max = Math.max(...valid);
+  const spread = Math.max(0.02, max - min);
+  return {
+    min: Math.max(0, min - spread * 0.22),
+    max: Math.min(1, max + spread * 0.22)
+  };
+}
+
+function scale(value, domainMin, domainMax, rangeMin, rangeMax) {
+  if (domainMax <= domainMin) return rangeMax;
+  const ratio = (Number(value || 0) - domainMin) / (domainMax - domainMin);
+  return rangeMin + ratio * (rangeMax - rangeMin);
+}
+
 function renderTrend() {
   const days = state.data.recentDays.filter((day) => day.sessions > 0);
   if (!days.length) {
@@ -150,33 +237,43 @@ function renderTrend() {
   }
 
   const model = activeModel();
-  const width = 1000;
-  const height = 430;
-  const pad = { top: 18, right: 26, bottom: 46, left: 62 };
+  const width = 1120;
+  const height = 470;
+  const pad = { top: 30, right: 92, bottom: 54, left: 78 };
   const chartW = width - pad.left - pad.right;
-  const topH = 205;
-  const bottomTop = pad.top + topH + 58;
-  const bottomH = 92;
-  const maxTokens = Math.max(...days.map((day) => day.totalTokens));
+  const mainH = 274;
+  const mainBottom = pad.top + mainH;
+  const cacheTop = mainBottom + 52;
+  const cacheH = 82;
+  const cacheBottom = cacheTop + cacheH;
+  const maxTokens = niceMax(Math.max(...days.map((day) => day.totalTokens)));
   const costs = days.map((day) => calcCost(day, model).totalCost);
-  const maxCost = Math.max(...costs);
-  const maxCache = 1;
-  const gap = 8;
-  const barW = Math.max(6, chartW / days.length - gap);
-  const xFor = (index) => pad.left + index * (chartW / days.length) + gap / 2;
-  const xMidFor = (index) => xFor(index) + barW / 2;
+  const maxCost = niceMax(Math.max(...costs));
+  const cacheBounds = rateBounds(days.map((day) => day.cacheHitRate || 0));
+  const band = chartW / Math.max(1, days.length);
+  const barW = Math.max(7, Math.min(34, band * 0.56));
+  const xMidFor = (index) => pad.left + band * index + band / 2;
+  const xFor = (index) => xMidFor(index) - barW / 2;
+  const tokenTicks = axisTicks(maxTokens, 4);
+  const costTicks = axisTicks(maxCost, 4);
+  const cacheTicks = [cacheBounds.min, (cacheBounds.min + cacheBounds.max) / 2, cacheBounds.max];
+  const labelEvery = Math.max(1, Math.ceil(days.length / 8));
 
   const bars = days
     .map((day, index) => {
       const x = xFor(index);
-      const h = maxTokens ? (day.totalTokens / maxTokens) * topH * 0.74 : 0;
-      const y = pad.top + topH - h;
+      const y = scale(day.totalTokens, 0, maxTokens, mainBottom, pad.top);
+      const h = mainBottom - y;
       const label = day.day.slice(5);
       return `<g>
         <rect class="bar-total" x="${x}" y="${y}" width="${barW}" height="${h}" rx="4">
-          <title>${day.day}: ${formatInt(day.totalTokens)} tokens</title>
+          <title>${day.day}: ${formatInt(day.totalTokens)} tokens / ${formatUsd(calcCost(day, model).totalCost)}</title>
         </rect>
-        ${index % Math.ceil(days.length / 8) === 0 ? `<text class="axis" x="${x}" y="${height - 16}">${label}</text>` : ""}
+        ${
+          index % labelEvery === 0 || index === days.length - 1
+            ? `<text class="axis axis-x" x="${xMidFor(index)}" y="${height - 18}" text-anchor="middle">${label}</text>`
+            : ""
+        }
       </g>`;
     })
     .join("");
@@ -184,34 +281,57 @@ function renderTrend() {
   const costPoints = days.map((day, index) => {
     const x = xMidFor(index);
     const cost = calcCost(day, model).totalCost;
-    const y = pad.top + topH - (maxCost ? (cost / maxCost) * topH * 0.74 : 0);
+    const y = scale(cost, 0, maxCost, mainBottom, pad.top);
     return { x, y, cost };
   });
 
   const cachePoints = days.map((day, index) => {
     const x = xMidFor(index);
-    const y = bottomTop + bottomH - ((day.cacheHitRate || 0) / maxCache) * bottomH;
+    const y = scale(day.cacheHitRate || 0, cacheBounds.min, cacheBounds.max, cacheBottom, cacheTop);
     return { x, y, rate: day.cacheHitRate || 0 };
   });
+
+  const leftAxis = tokenTicks
+    .map((tick) => {
+      const y = scale(tick, 0, maxTokens, mainBottom, pad.top);
+      return `<g>
+        <line class="grid-line" x1="${pad.left}" y1="${y}" x2="${width - pad.right}" y2="${y}" />
+        <text class="axis" x="${pad.left - 12}" y="${y + 4}" text-anchor="end">${formatCompact(tick)}</text>
+      </g>`;
+    })
+    .join("");
+
+  const rightAxis = costTicks
+    .map((tick) => {
+      const y = scale(tick, 0, maxCost, mainBottom, pad.top);
+      return `<text class="axis" x="${width - pad.right + 12}" y="${y + 4}">${formatUsd(tick)}</text>`;
+    })
+    .join("");
+
+  const cacheAxis = cacheTicks
+    .map((tick) => {
+      const y = scale(tick, cacheBounds.min, cacheBounds.max, cacheBottom, cacheTop);
+      return `<g>
+        <line class="grid-line grid-line-soft" x1="${pad.left}" y1="${y}" x2="${width - pad.right}" y2="${y}" />
+        <text class="axis" x="${pad.left - 12}" y="${y + 4}" text-anchor="end">${shortPct(tick)}</text>
+      </g>`;
+    })
+    .join("");
 
   const dots = costPoints
     .map(
       (point, index) =>
-        `<circle class="dot-cost" cx="${point.x}" cy="${point.y}" r="4"><title>${days[index].day}: ${formatUsd(point.cost)}</title></circle>`
+        `<circle class="dot-cost" cx="${point.x}" cy="${point.y}" r="3.6"><title>${days[index].day}: ${formatUsd(point.cost)}</title></circle>`
     )
     .join("");
 
-  const maxDayIndex = days.findIndex((day) => day.totalTokens === maxTokens);
   const lastIndex = days.length - 1;
-  const labels = [maxDayIndex, lastIndex]
-    .filter((value, index, array) => value >= 0 && array.indexOf(value) === index)
-    .map((index) => {
-      const x = xMidFor(index);
-      const h = maxTokens ? (days[index].totalTokens / maxTokens) * topH * 0.74 : 0;
-      const y = pad.top + topH - h - 9;
-      return `<text class="value-label" x="${x}" y="${Math.max(18, y)}" text-anchor="middle">${formatCompact(days[index].totalTokens)}</text>`;
-    })
-    .join("");
+  const latestTokenY = scale(days[lastIndex].totalTokens, 0, maxTokens, mainBottom, pad.top);
+  const latestCostPoint = costPoints[lastIndex];
+  const latestCachePoint = cachePoints[lastIndex];
+  const cacheArea = cachePoints.length
+    ? `M${cachePoints[0].x.toFixed(2)},${cacheBottom} ${pathForPoints(cachePoints).replace(/^M/, "L")} L${cachePoints[lastIndex].x.toFixed(2)},${cacheBottom} Z`
+    : "";
 
   $("trendChart").innerHTML = `<div class="chart-legend">
       <span><i class="legend-bar"></i>Total tokens</span>
@@ -219,21 +339,37 @@ function renderTrend() {
       <span><i class="legend-cache"></i>Cache hit rate</span>
     </div>
     <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="daily token trend">
-    <rect class="plot-bg" x="${pad.left}" y="${pad.top}" width="${chartW}" height="${topH}" rx="10"></rect>
-    <rect class="plot-bg" x="${pad.left}" y="${bottomTop}" width="${chartW}" height="${bottomH}" rx="10"></rect>
-    <line class="grid-line" x1="${pad.left}" y1="${pad.top + topH}" x2="${width - pad.right}" y2="${pad.top + topH}" />
-    <line class="grid-line" x1="${pad.left}" y1="${pad.top + topH * 0.5}" x2="${width - pad.right}" y2="${pad.top + topH * 0.5}" />
-    <line class="grid-line" x1="${pad.left}" y1="${bottomTop + bottomH}" x2="${width - pad.right}" y2="${bottomTop + bottomH}" />
-    <line class="grid-line" x1="${pad.left}" y1="${bottomTop + bottomH * 0.2}" x2="${width - pad.right}" y2="${bottomTop + bottomH * 0.2}" />
-    <text class="axis" x="10" y="${pad.top + 14}">${formatCompact(maxTokens)}</text>
-    <text class="axis" x="${width - 142}" y="${pad.top + 14}">${formatUsd(maxCost)} peak</text>
-    <text class="axis" x="16" y="${bottomTop + 12}">100%</text>
-    <text class="axis" x="22" y="${bottomTop + bottomH - 4}">0%</text>
+    <defs>
+      <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#b8ddf0" stop-opacity="0.95" />
+        <stop offset="100%" stop-color="#d8eff3" stop-opacity="0.58" />
+      </linearGradient>
+      <linearGradient id="cacheAreaGradient" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#ffd19c" stop-opacity="0.28" />
+        <stop offset="100%" stop-color="#ffd19c" stop-opacity="0.02" />
+      </linearGradient>
+    </defs>
+    <rect class="plot-bg" x="${pad.left}" y="${pad.top}" width="${chartW}" height="${mainH}" rx="8"></rect>
+    <rect class="plot-bg plot-bg-soft" x="${pad.left}" y="${cacheTop}" width="${chartW}" height="${cacheH}" rx="8"></rect>
+    ${leftAxis}
+    ${rightAxis}
+    ${cacheAxis}
+    <line class="axis-line" x1="${pad.left}" y1="${pad.top}" x2="${pad.left}" y2="${mainBottom}" />
+    <line class="axis-line" x1="${width - pad.right}" y1="${pad.top}" x2="${width - pad.right}" y2="${mainBottom}" />
+    <line class="axis-line" x1="${pad.left}" y1="${mainBottom}" x2="${width - pad.right}" y2="${mainBottom}" />
+    <line class="axis-line" x1="${pad.left}" y1="${cacheBottom}" x2="${width - pad.right}" y2="${cacheBottom}" />
+    <text class="axis axis-title" x="${pad.left}" y="${pad.top - 12}">tokens</text>
+    <text class="axis axis-title" x="${width - pad.right}" y="${pad.top - 12}" text-anchor="end">cost</text>
+    <text class="axis axis-title" x="${pad.left}" y="${cacheTop - 12}">cache hit</text>
     ${bars}
-    ${labels}
-    <path class="line-cost" d="${pathForPoints(costPoints)}" />
+    <path class="line-cost" d="${smoothPath(costPoints)}" />
     ${dots}
-    <path class="line-cache" d="${pathForPoints(cachePoints)}" />
+    ${cacheArea ? `<path class="area-cache" d="${cacheArea}" />` : ""}
+    <path class="line-cache" d="${smoothPath(cachePoints)}" />
+    <circle class="dot-latest" cx="${xMidFor(lastIndex)}" cy="${latestTokenY}" r="4"><title>${days[lastIndex].day}: ${formatInt(days[lastIndex].totalTokens)} tokens</title></circle>
+    <text class="value-label" x="${Math.min(width - pad.right - 38, xMidFor(lastIndex) + 10)}" y="${Math.max(pad.top + 18, latestTokenY - 10)}">${formatCompact(days[lastIndex].totalTokens)}</text>
+    <text class="value-label value-label-cost" x="${Math.max(pad.left + 8, latestCostPoint.x - 58)}" y="${Math.max(pad.top + 18, latestCostPoint.y - 10)}">${formatUsd(latestCostPoint.cost)}</text>
+    <text class="value-label value-label-cache" x="${Math.max(pad.left + 8, latestCachePoint.x - 54)}" y="${Math.max(cacheTop + 16, latestCachePoint.y - 8)}">${shortPct(latestCachePoint.rate)}</text>
   </svg>`;
 }
 
@@ -340,7 +476,7 @@ function bindEvents() {
   });
   $("autoRefresh").addEventListener("change", (event) => {
     if (event.target.checked) {
-      state.timer = window.setInterval(() => refresh(), 30_000);
+      state.timer = window.setInterval(() => refresh(), state.refreshMs);
     } else {
       window.clearInterval(state.timer);
       state.timer = null;
@@ -350,4 +486,4 @@ function bindEvents() {
 
 bindEvents();
 refresh();
-state.timer = window.setInterval(() => refresh(), 30_000);
+state.timer = window.setInterval(() => refresh(), state.refreshMs);

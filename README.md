@@ -27,8 +27,8 @@
 - 估算输入、缓存输入、输出 token 的费用
 - 使用事件时间归因，避免按 session 创建日期误算每日用量
 - 展示 cache hit rate、reasoning output tokens、活跃 session 数
-- 展示 5h primary 和 1w secondary 额度窗口峰值
-- macOS 菜单栏实时显示今日估算费用、total tokens、5h 和 1w 用量
+- 展示 5h primary 和 1w secondary 额度窗口峰值、快照年龄和重置剩余时间
+- macOS 菜单栏显示今日估算费用、total tokens、5h 和 1w 用量
 - 菜单栏 quota 文字按 5h primary / 1w secondary 使用率从薄荷绿渐变到玫红
 - 支持 LaunchAgent，开机后自动启动 dashboard 和菜单栏
 
@@ -77,7 +77,7 @@ $70/85.7M/84%/54%
 薄荷绿 -> 蜂蜜黄 -> 蜜桃橙 -> 玫红
 ```
 
-展开下拉菜单后，会同时看到 `Today`、`Last 7d`、`Last 30d`、`Month` 的 token 和预估价格，以及 `5h primary` / `1w secondary` 的当前重置窗口峰值。
+展开下拉菜单后，会同时看到 `Today`、`Last 7d`、`Last 30d`、`Month` 的 token 和预估价格，以及 `5h primary` / `1w secondary` 的当前重置窗口峰值。Dashboard 和菜单栏默认每 10 秒刷新一次；额度窗口来自 Codex session 写入的 `token_count.rate_limits` 快照，所以没有新的 Codex 活动时，窗口值会停留在最后一次快照。
 
 如果想换成别的模型，例如 `gpt-5.4`：
 
