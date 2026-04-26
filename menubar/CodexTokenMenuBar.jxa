@@ -138,20 +138,31 @@ function setStatusChrome(online) {
   statusItem.button.image = null;
 }
 
-function setStatusTitle(title, online, usedPercent) {
+function addTextAttributes(attributed, start, length, color, weight) {
+  start = number(start);
+  length = number(length);
+  if (length <= 0) return;
+  var attrs = $.NSMutableDictionary.dictionary;
+  attrs.setObjectForKey(color, $.NSForegroundColorAttributeName);
+  attrs.setObjectForKey($.NSFont.monospacedDigitSystemFontOfSizeWeight(12, weight), $.NSFontAttributeName);
+  attributed.addAttributesRange(attrs, $.NSMakeRange(start, length));
+}
+
+function setStatusTitle(title, online, primaryStart, primaryLength, primaryUsed, secondaryStart, secondaryLength, secondaryUsed) {
   var isOnline = online !== false;
   setStatusChrome(isOnline);
   statusItem.button.title = title;
   try {
-    var tone = isOnline
-      ? statusColor(usedPercent)
+    var baseTone = isOnline
+      ? $.NSColor.colorWithRedGreenBlueAlpha(0.72, 0.85, 0.94, 1)
       : $.NSColor.colorWithRedGreenBlueAlpha(0.54, 0.60, 0.62, 1);
     var attributed = $.NSMutableAttributedString.alloc.init;
     attributed.mutableString.setString(title);
-    var attrs = $.NSMutableDictionary.dictionary;
-    attrs.setObjectForKey(tone, $.NSForegroundColorAttributeName);
-    attrs.setObjectForKey($.NSFont.monospacedDigitSystemFontOfSizeWeight(12, 0.24), $.NSFontAttributeName);
-    attributed.addAttributesRange(attrs, $.NSMakeRange(0, title.length));
+    addTextAttributes(attributed, 0, title.length, baseTone, 0.24);
+    if (isOnline) {
+      addTextAttributes(attributed, primaryStart, primaryLength, statusColor(primaryUsed), 0.34);
+      addTextAttributes(attributed, secondaryStart, secondaryLength, statusColor(secondaryUsed), 0.34);
+    }
     statusItem.button.attributedTitle = attributed;
   } catch (error) {
     statusItem.button.title = title;
@@ -212,7 +223,7 @@ function updateMenu(root, last7, today, last30, month) {
   var rate = root.latestRate || null;
   if (rate) {
     menu.addItem(item("5h primary: " + trim(rate.maxPrimaryUsed) + "% max / " + trim(rate.primaryLatestUsed) + "% latest"));
-    menu.addItem(item("Secondary max: " + trim(rate.maxSecondaryUsed) + "% (latest " + trim(rate.secondaryLatestUsed) + "%)"));
+    menu.addItem(item("1w secondary: " + trim(rate.maxSecondaryUsed) + "% max / " + trim(rate.secondaryLatestUsed) + "% latest"));
   } else {
     menu.addItem(item("Rate limit: no snapshot"));
   }
@@ -234,14 +245,28 @@ function updateStatus() {
     var month = rangeSummary(root, "currentMonth", "Month");
     var rate = root.latestRate || {};
     var primaryUsed = number(rate.maxPrimaryUsed);
-    var title = barDollars(today.cost) + " / " + compact(today.tokens) + " / " + trim(primaryUsed) + "%";
-    setStatusTitle(title, true, primaryUsed);
+    var secondaryUsed = number(rate.maxSecondaryUsed);
+    var baseTitle = barDollars(today.cost) + "/" + compact(today.tokens) + "/";
+    var primaryText = trim(primaryUsed) + "%";
+    var middle = "/";
+    var secondaryText = trim(secondaryUsed) + "%";
+    var title = baseTitle + primaryText + middle + secondaryText;
+    setStatusTitle(
+      title,
+      true,
+      baseTitle.length,
+      primaryText.length,
+      primaryUsed,
+      baseTitle.length + primaryText.length + middle.length,
+      secondaryText.length,
+      secondaryUsed
+    );
     statusItem.button.toolTip =
       pricingModelLabel + " today: " + compact(today.tokens) + " tokens, " +
-      dollars(today.cost, false) + " | 5h primary " + trim(primaryUsed) + "%";
+      dollars(today.cost, false) + " | 5h primary " + trim(primaryUsed) + "% | 1w secondary " + trim(secondaryUsed) + "%";
     updateMenu(root, last7, today, last30, month);
   } catch (error) {
-    setStatusTitle("Codex offline", false, 0);
+    setStatusTitle("Codex offline", false, 0, 0, 0, 0, 0, 0);
     statusItem.button.toolTip = String(error);
     var menu = $.NSMenu.alloc.initWithTitle("Codex Token Monitor");
     menu.addItem(item("Dashboard API unavailable"));

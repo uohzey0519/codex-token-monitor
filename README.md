@@ -26,8 +26,8 @@
 - 使用事件时间归因，避免按 session 创建日期误算每日用量
 - 展示 cache hit rate、reasoning output tokens、活跃 session 数
 - 展示 5h primary 和 7d secondary 额度窗口
-- macOS 菜单栏实时显示今日估算费用和 total tokens
-- 菜单栏文字按 5h primary 使用率从薄荷绿渐变到玫红
+- macOS 菜单栏实时显示今日估算费用、total tokens、5h 和 1w 用量
+- 菜单栏 quota 文字按 5h primary / 1w secondary 使用率从薄荷绿渐变到玫红
 - 支持 LaunchAgent，开机后自动启动 dashboard 和菜单栏
 
 ## 环境要求
@@ -60,10 +60,16 @@ http://127.0.0.1:48731
 菜单栏默认显示：
 
 ```text
-$今日估算费用 / 今日 total tokens / 5h primary 使用率
+$今日估算费用 / 今日 total tokens / 5h primary 使用率 / 1w secondary 使用率
 ```
 
-默认按 `gpt-5.5` 估算费用。颜色使用 5h primary 额度窗口：
+为了节省菜单栏空间，实际显示不会写出 `5h` 和 `1w` 标签，例如：
+
+```text
+$70/85.7M/84%/54%
+```
+
+其中第三段是 5h primary，第四段是 1w secondary。默认按 `gpt-5.5` 估算费用。前两段使用固定柔和蓝色，后两段分别按对应额度窗口变色：
 
 ```text
 薄荷绿 -> 蜂蜜黄 -> 蜜桃橙 -> 玫红
