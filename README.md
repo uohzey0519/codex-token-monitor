@@ -77,7 +77,13 @@ $70/85.7M/84%/54%
 薄荷绿 -> 蜂蜜黄 -> 蜜桃橙 -> 玫红
 ```
 
-展开下拉菜单后，会同时看到 `Today`、`Last 7d`、`Last 30d`、`Month` 的 token 和预估价格，以及 `5h primary` / `1w secondary` 的当前重置窗口峰值。Dashboard 和菜单栏默认每 10 秒刷新一次；额度窗口来自 Codex session 写入的 `token_count.rate_limits` 快照，所以没有新的 Codex 活动时，窗口值会停留在最后一次快照。
+展开下拉菜单后，会同时看到 `Today`、`Last 7d`、`Last 30d`、`Month` 的 token 和预估价格，以及 `5h primary` / `1w secondary` 的当前重置窗口峰值。
+
+## 刷新口径
+
+Dashboard 和菜单栏默认每 10 秒读取一次本地 API，服务端扫描缓存默认是 2.5 秒。`total tokens`、缓存命中和预估费用来自 session 里的 `token_count.info.total_token_usage`，通常会随着当前 working turn 的 session 写入持续更新。
+
+额度窗口不是本工具本地实时推算出来的余额，而是 Codex 写入 session 的 `token_count.rate_limits` 快照。working 期间 session 文件可能一直在写 token 用量，但 `rate_limits.used_percent` 不一定每次同步变化，常见情况是要等当前 turn 结束或后端某次 checkpoint 后才写入新的 5h / 1w 快照。因此额度百分比可能滞后几十秒到约一分钟；Dashboard 上的“本地快照 · Ns 前”表示本工具读到的最新 quota 快照时间。
 
 如果想换成别的模型，例如 `gpt-5.4`：
 
