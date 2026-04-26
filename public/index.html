@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Codex Token Monitor</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-theme="sage">
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <div class="eyebrow">Local Codex Usage</div>
+          <h1>Token Monitor</h1>
+        </div>
+        <div class="controls">
+          <label class="select-label">
+            模型
+            <select id="modelSelect" aria-label="pricing model"></select>
+          </label>
+          <button id="refreshBtn" class="primary-btn" type="button">刷新</button>
+          <label class="toggle">
+            <input id="autoRefresh" type="checkbox" checked />
+            <span>自动</span>
+          </label>
+        </div>
+      </header>
+
+      <section class="status-strip">
+        <div>
+          <span class="muted">数据源</span>
+          <strong id="dataSource">-</strong>
+        </div>
+        <div>
+          <span class="muted">当前价格</span>
+          <strong id="priceSource">-</strong>
+        </div>
+        <div>
+          <span class="muted">更新时间</span>
+          <strong id="updatedAt">-</strong>
+        </div>
+        <div>
+          <span class="muted">扫描耗时</span>
+          <strong id="scanTime">-</strong>
+        </div>
+      </section>
+
+      <nav class="range-tabs" aria-label="range">
+        <button data-range="today" type="button">今天</button>
+        <button data-range="last7" class="active" type="button">近 7 天</button>
+        <button data-range="last30" type="button">近 30 天</button>
+        <button data-range="currentMonth" type="button">本月</button>
+        <button data-range="all" type="button">全部</button>
+      </nav>
+
+      <main class="dashboard">
+        <section class="summary-grid">
+          <article class="metric-card priority">
+            <span>估算费用</span>
+            <strong id="costValue">$0.00</strong>
+            <small id="costBreakdown">-</small>
+          </article>
+          <article class="metric-card">
+            <span>Total tokens</span>
+            <strong id="totalTokens">0</strong>
+            <small id="sessionCount">-</small>
+          </article>
+          <article class="metric-card">
+            <span>缓存命中率</span>
+            <strong id="cacheRate">0%</strong>
+            <small id="cachedTokens">-</small>
+          </article>
+          <article class="metric-card">
+            <span>输出 tokens</span>
+            <strong id="outputTokens">0</strong>
+            <small id="reasoningTokens">-</small>
+          </article>
+        </section>
+
+        <section class="panel rate-panel">
+          <div class="panel-title">
+            <div>
+              <h2>额度窗口</h2>
+              <p id="rateContext">等待数据</p>
+            </div>
+          </div>
+          <div class="rate-grid">
+            <div>
+              <div class="bar-label">
+                <span>Primary</span>
+                <strong id="primaryUsed">0%</strong>
+              </div>
+              <div class="progress"><span id="primaryBar"></span></div>
+              <small id="primaryReset">-</small>
+            </div>
+            <div>
+              <div class="bar-label">
+                <span>Secondary</span>
+                <strong id="secondaryUsed">0%</strong>
+              </div>
+              <div class="progress"><span id="secondaryBar"></span></div>
+              <small id="secondaryReset">-</small>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel wide">
+          <div class="panel-title">
+            <div>
+              <h2>每日趋势</h2>
+              <p>近 31 个活跃日，双面板展示 token、费用和缓存命中率</p>
+            </div>
+          </div>
+          <div id="trendChart" class="chart"></div>
+        </section>
+
+        <section class="panel wide">
+          <div class="panel-title">
+            <div>
+              <h2>按月概览</h2>
+              <p>长期跟踪每月 tokens、费用、活跃日和缓存表现</p>
+            </div>
+          </div>
+          <div id="monthOverview" class="month-overview"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">
+            <div>
+              <h2>高峰日期</h2>
+              <p>最吃 token 的日期</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>日期</th>
+                  <th>Sessions</th>
+                  <th>Tokens</th>
+                  <th>费用</th>
+                </tr>
+              </thead>
+              <tbody id="topDays"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">
+            <div>
+              <h2>高峰线程</h2>
+              <p>按单 session 排序</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>日期</th>
+                  <th>Tokens</th>
+                  <th>缓存</th>
+                  <th>文件</th>
+                </tr>
+              </thead>
+              <tbody id="topSessions"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

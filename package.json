@@ -1,0 +1,22 @@
+{
+  "name": "codex-token-monitor",
+  "version": "1.0.0",
+  "description": "Local Codex token usage dashboard and macOS menu bar monitor.",
+  "private": false,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "install:macos": "bash scripts/install-macos.sh",
+    "uninstall:macos": "bash scripts/uninstall-macos.sh",
+    "status:macos": "bash scripts/status-macos.sh",
+    "check": "node --check server.js && osacompile -l JavaScript -o /tmp/CodexTokenMenuBar.scpt menubar/CodexTokenMenuBar.jxa"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/uohzey-ai/codex-token-monitor.git"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

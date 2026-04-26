@@ -1,0 +1,265 @@
+ObjC.import("Cocoa");
+ObjC.import("Foundation");
+
+function envValue(key, fallback) {
+  try {
+    var value = $.NSProcessInfo.processInfo.environment.objectForKey(key);
+    return value ? ObjC.unwrap(value) : fallback;
+  } catch (error) {
+    return fallback;
+  }
+}
+
+var endpoint = "http://127.0.0.1:48731/api/summary";
+var dashboard = "http://127.0.0.1:48731";
+var pricingModelId = envValue("CODEX_TOKEN_MENU_MODEL", "gpt-5.5");
+var pricingModelLabel = pricingModelId;
+var app = $.NSApplication.sharedApplication;
+app.setActivationPolicy(1);
+
+var statusItem = $.NSStatusBar.systemStatusBar.statusItemWithLength($.NSVariableStatusItemLength);
+statusItem.button.title = "$... / ...";
+statusItem.button.toolTip = "Codex token monitor";
+statusItem.button.font = $.NSFont.monospacedDigitSystemFontOfSizeWeight(12, 0.24);
+
+ObjC.registerSubclass({
+  name: "CodexTokenMenuBarController",
+  superclass: "NSObject",
+  methods: {
+    "tick:": {
+      types: ["void", ["id"]],
+      implementation: function(sender) {
+        updateStatus();
+      }
+    },
+    "refresh:": {
+      types: ["void", ["id"]],
+      implementation: function(sender) {
+        setStatusTitle("$... / ...");
+        updateStatus();
+      }
+    },
+    "openDashboard:": {
+      types: ["void", ["id"]],
+      implementation: function(sender) {
+        $.NSWorkspace.sharedWorkspace.openURL($.NSURL.URLWithString(dashboard));
+      }
+    },
+    "quit:": {
+      types: ["void", ["id"]],
+      implementation: function(sender) {
+        app.terminate(null);
+      }
+    }
+  }
+});
+
+var controller = $.CodexTokenMenuBarController.alloc.init;
+
+function number(value) {
+  if (value === undefined || value === null) return 0;
+  return Number(value) || 0;
+}
+
+function compact(value) {
+  value = number(value);
+  var absValue = Math.abs(value);
+  if (absValue >= 1000000000) return trim(value / 1000000000) + "B";
+  if (absValue >= 1000000) return trim(value / 1000000) + "M";
+  if (absValue >= 1000) return trim(value / 1000) + "K";
+  return trim(value);
+}
+
+function trim(value) {
+  value = number(value);
+  if (Math.abs(value) >= 100) return value.toFixed(0);
+  if (Math.abs(value) >= 10) return value.toFixed(1);
+  return value.toFixed(2);
+}
+
+function dollars(value, short) {
+  value = number(value);
+  if (short || value >= 100) return "$" + trim(value);
+  return "$" + value.toFixed(2);
+}
+
+function barDollars(value) {
+  value = number(value);
+  if (value >= 10) return "$" + value.toFixed(0);
+  if (value >= 1) return "$" + value.toFixed(1);
+  return "$" + value.toFixed(2);
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, number(value)));
+}
+
+function mix(a, b, t) {
+  return [
+    a[0] + (b[0] - a[0]) * t,
+    a[1] + (b[1] - a[1]) * t,
+    a[2] + (b[2] - a[2]) * t
+  ];
+}
+
+function statusPalette(usedPercent) {
+  var p = clamp(usedPercent, 0, 100) / 100;
+  var stops = [
+    { p: 0.0, rgb: [0.53, 0.85, 0.76], name: "mint" },
+    { p: 0.55, rgb: [0.95, 0.82, 0.48], name: "honey" },
+    { p: 0.8, rgb: [0.95, 0.60, 0.43], name: "peach" },
+    { p: 1.0, rgb: [0.90, 0.42, 0.54], name: "rose" }
+  ];
+
+  for (var index = 0; index < stops.length - 1; index += 1) {
+    var left = stops[index];
+    var right = stops[index + 1];
+    if (p <= right.p) {
+      var local = (p - left.p) / (right.p - left.p);
+      return {
+        rgb: mix(left.rgb, right.rgb, local),
+        name: right.name
+      };
+    }
+  }
+
+  return {
+    rgb: stops[stops.length - 1].rgb,
+    name: stops[stops.length - 1].name
+  };
+}
+
+function statusColor(usedPercent) {
+  var palette = statusPalette(usedPercent);
+  return $.NSColor.colorWithRedGreenBlueAlpha(palette.rgb[0], palette.rgb[1], palette.rgb[2], 1);
+}
+
+function setStatusChrome(online) {
+  statusItem.button.image = null;
+}
+
+function setStatusTitle(title, online, usedPercent) {
+  var isOnline = online !== false;
+  setStatusChrome(isOnline);
+  statusItem.button.title = title;
+  try {
+    var tone = isOnline
+      ? statusColor(usedPercent)
+      : $.NSColor.colorWithRedGreenBlueAlpha(0.54, 0.60, 0.62, 1);
+    var attributed = $.NSMutableAttributedString.alloc.init;
+    attributed.mutableString.setString(title);
+    var attrs = $.NSMutableDictionary.dictionary;
+    attrs.setObjectForKey(tone, $.NSForegroundColorAttributeName);
+    attrs.setObjectForKey($.NSFont.monospacedDigitSystemFontOfSizeWeight(12, 0.24), $.NSFontAttributeName);
+    attributed.addAttributesRange(attrs, $.NSMakeRange(0, title.length));
+    statusItem.button.attributedTitle = attributed;
+  } catch (error) {
+    statusItem.button.title = title;
+  }
+}
+
+function percent(value) {
+  return (number(value) * 100).toFixed(1) + "%";
+}
+
+function readJSON(url) {
+  var data = $.NSData.dataWithContentsOfURL($.NSURL.URLWithString(url));
+  if (!data) throw new Error("No data from dashboard API");
+  var text = $.NSString.alloc.initWithDataEncoding(data, $.NSUTF8StringEncoding).js;
+  return JSON.parse(text);
+}
+
+function rangeSummary(root, key, label) {
+  var range = (root.ranges || {})[key] || {};
+  var modelCosts = ((root.costs || {})[key] || {});
+  var costRoot = modelCosts[pricingModelId] || modelCosts["gpt-5.5"] || modelCosts["gpt-5.4"] || {};
+  return {
+    label: label,
+    tokens: number(range.totalTokens),
+    cacheHitRate: number(range.cacheHitRate),
+    cost: number(costRoot.totalCost)
+  };
+}
+
+function updatePricingLabel(root) {
+  var models = root.pricing || [];
+  for (var index = 0; index < models.length; index += 1) {
+    if (models[index].id === pricingModelId) {
+      pricingModelLabel = models[index].label || pricingModelId;
+      return;
+    }
+  }
+  pricingModelLabel = pricingModelId;
+}
+
+function item(title, action, key) {
+  var actionSelector = action ? $.NSSelectorFromString(action) : null;
+  var menuItem = $.NSMenuItem.alloc.initWithTitleActionKeyEquivalent(title, actionSelector, key || "");
+  if (action) menuItem.target = controller;
+  return menuItem;
+}
+
+function updateMenu(root, last7, today, last30, month) {
+  var menu = $.NSMenu.alloc.initWithTitle("Codex Token Monitor");
+  menu.addItem(item("Codex Token Monitor - " + pricingModelLabel + " estimate"));
+  menu.addItem($.NSMenuItem.separatorItem);
+  [today, last7, last30, month].forEach(function(row) {
+    menu.addItem(item(row.label + ": " + compact(row.tokens) + " tokens / " + dollars(row.cost, false)));
+  });
+  menu.addItem(item("Cache hit: " + percent(last7.cacheHitRate)));
+  menu.addItem($.NSMenuItem.separatorItem);
+
+  var rate = root.latestRate || null;
+  if (rate) {
+    menu.addItem(item("5h primary: " + trim(rate.maxPrimaryUsed) + "% max / " + trim(rate.primaryLatestUsed) + "% latest"));
+    menu.addItem(item("Secondary max: " + trim(rate.maxSecondaryUsed) + "% (latest " + trim(rate.secondaryLatestUsed) + "%)"));
+  } else {
+    menu.addItem(item("Rate limit: no snapshot"));
+  }
+
+  menu.addItem($.NSMenuItem.separatorItem);
+  menu.addItem(item("Refresh Now", "refresh:", "r"));
+  menu.addItem(item("Open Dashboard", "openDashboard:", "o"));
+  menu.addItem(item("Quit Menu Bar Helper", "quit:", "q"));
+  statusItem.menu = menu;
+}
+
+function updateStatus() {
+  try {
+    var root = readJSON(endpoint);
+    updatePricingLabel(root);
+    var today = rangeSummary(root, "today", "Today");
+    var last7 = rangeSummary(root, "last7", "Last 7d");
+    var last30 = rangeSummary(root, "last30", "Last 30d");
+    var month = rangeSummary(root, "currentMonth", "Month");
+    var rate = root.latestRate || {};
+    var primaryUsed = number(rate.maxPrimaryUsed);
+    var title = barDollars(today.cost) + " / " + compact(today.tokens);
+    setStatusTitle(title, true, primaryUsed);
+    statusItem.button.toolTip =
+      pricingModelLabel + " today: " + compact(today.tokens) + " tokens, " +
+      dollars(today.cost, false) + " | 5h primary " + trim(primaryUsed) + "%";
+    updateMenu(root, last7, today, last30, month);
+  } catch (error) {
+    setStatusTitle("Codex offline", false, 0);
+    statusItem.button.toolTip = String(error);
+    var menu = $.NSMenu.alloc.initWithTitle("Codex Token Monitor");
+    menu.addItem(item("Dashboard API unavailable"));
+    menu.addItem(item(String(error)));
+    menu.addItem($.NSMenuItem.separatorItem);
+    menu.addItem(item("Refresh Now", "refresh:", "r"));
+    menu.addItem(item("Open Dashboard", "openDashboard:", "o"));
+    menu.addItem(item("Quit Menu Bar Helper", "quit:", "q"));
+    statusItem.menu = menu;
+  }
+}
+
+updateStatus();
+var timer = $.NSTimer.scheduledTimerWithTimeIntervalTargetSelectorUserInfoRepeats(
+  30,
+  controller,
+  $.NSSelectorFromString("tick:"),
+  null,
+  true
+);
+app.run();
