@@ -107,6 +107,15 @@ function fallbackDayFromPath(filePath) {
   return match ? `${match[1]}-${match[2]}-${match[3]}` : "unknown";
 }
 
+function displayPath(filePath) {
+  const home = os.homedir();
+  if (filePath === home) return "~";
+  if (filePath.startsWith(`${home}${path.sep}`)) {
+    return `~${path.sep}${path.relative(home, filePath)}`;
+  }
+  return filePath;
+}
+
 function walkJsonl(dir, out = []) {
   let entries = [];
   try {
@@ -576,6 +585,7 @@ function buildScan() {
       cacheTtlMs: CACHE_TTL_MS,
       refreshNote: "Rate limits are read from Codex session token_count snapshots.",
       sessionsRoot: SESSIONS_ROOT,
+      sessionsRootDisplay: displayPath(SESSIONS_ROOT),
       fileCount: files.length,
       cacheEntries: fileCache.size
     },

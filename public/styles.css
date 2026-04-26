@@ -202,7 +202,7 @@ select:hover {
 }
 
 .status-strip {
-  grid-template-columns: 1.35fr 1.25fr 0.8fr auto;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   padding: 15px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -211,6 +211,17 @@ select:hover {
     rgba(255, 255, 255, 0.58);
   box-shadow: var(--shadow);
   backdrop-filter: var(--blur);
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease,
+    background 180ms ease;
+}
+
+.status-strip:hover {
+  transform: translateY(-2px) scale(1.006);
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-hover);
 }
 
 .status-strip div {
@@ -220,10 +231,9 @@ select:hover {
 }
 
 .status-strip strong {
-  overflow: hidden;
   font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.36;
+  overflow-wrap: anywhere;
 }
 
 .range-tabs {
@@ -643,9 +653,12 @@ th.numeric {
   .topbar,
   .dashboard,
   .summary-grid,
-  .rate-grid,
-  .status-strip {
+  .rate-grid {
     grid-template-columns: 1fr;
+  }
+
+  .status-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .topbar {
@@ -675,5 +688,11 @@ th.numeric {
   .chart svg {
     min-width: 820px;
     height: 410px;
+  }
+}
+
+@media (max-width: 460px) {
+  .status-strip {
+    grid-template-columns: 1fr;
   }
 }

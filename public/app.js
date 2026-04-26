@@ -45,6 +45,12 @@ function setText(id, text) {
   $(id).textContent = text;
 }
 
+function displayPath(value) {
+  if (!value) return "-";
+  const text = String(value);
+  return text.replace(/^\/Users\/[^/]+/, "~");
+}
+
 function setBar(id, value) {
   const percent = Math.max(0, Math.min(100, Number(value || 0)));
   const el = $(id);
@@ -127,7 +133,7 @@ function renderSummary() {
   setText("outputTokens", formatCompact(total.outputTokens));
   setText("reasoningTokens", `${formatCompact(total.reasoningOutputTokens)} reasoning tokens included`);
 
-  setText("dataSource", state.data.meta.sessionsRoot);
+  setText("dataSource", state.data.meta.sessionsRootDisplay || displayPath(state.data.meta.sessionsRoot));
   setText(
     "priceSource",
     `input $${model.input}/M · hit ${model.cachedInput === null ? "无折扣" : `$${model.cachedInput}/M`} · output $${model.output}/M`
@@ -166,7 +172,7 @@ function renderRate() {
 
   setText(
     "rateContext",
-    `${rate.plan_type || "unknown plan"} · session snapshot · ${snapshotAge}`
+    `${rate.plan_type || "unknown plan"} · 本地快照 · ${snapshotAge}`
   );
   setText("primaryLabel", windowLabel(primary.window_minutes, "primary"));
   setText("secondaryLabel", windowLabel(secondary.window_minutes, "secondary"));
