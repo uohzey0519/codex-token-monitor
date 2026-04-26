@@ -77,6 +77,10 @@ function trim(value) {
   return value.toFixed(2);
 }
 
+function wholePercent(value) {
+  return String(Math.round(number(value)));
+}
+
 function dollars(value, short) {
   value = number(value);
   if (short || value >= 100) return "$" + trim(value);
@@ -222,8 +226,8 @@ function updateMenu(root, last7, today, last30, month) {
 
   var rate = root.latestRate || null;
   if (rate) {
-    menu.addItem(item("5h primary: " + trim(rate.maxPrimaryUsed) + "% max / " + trim(rate.primaryLatestUsed) + "% latest"));
-    menu.addItem(item("1w secondary: " + trim(rate.maxSecondaryUsed) + "% max / " + trim(rate.secondaryLatestUsed) + "% latest"));
+    menu.addItem(item("5h primary: " + wholePercent(rate.maxPrimaryUsed) + "% max / " + wholePercent(rate.primaryLatestUsed) + "% latest"));
+    menu.addItem(item("1w secondary: " + wholePercent(rate.maxSecondaryUsed) + "% max / " + wholePercent(rate.secondaryLatestUsed) + "% latest"));
   } else {
     menu.addItem(item("Rate limit: no snapshot"));
   }
@@ -247,9 +251,9 @@ function updateStatus() {
     var primaryUsed = number(rate.maxPrimaryUsed);
     var secondaryUsed = number(rate.maxSecondaryUsed);
     var baseTitle = barDollars(today.cost) + "/" + compact(today.tokens) + "/";
-    var primaryText = trim(primaryUsed) + "%";
+    var primaryText = wholePercent(primaryUsed) + "%";
     var middle = "/";
-    var secondaryText = trim(secondaryUsed) + "%";
+    var secondaryText = wholePercent(secondaryUsed) + "%";
     var title = baseTitle + primaryText + middle + secondaryText;
     setStatusTitle(
       title,
@@ -263,7 +267,7 @@ function updateStatus() {
     );
     statusItem.button.toolTip =
       pricingModelLabel + " today: " + compact(today.tokens) + " tokens, " +
-      dollars(today.cost, false) + " | 5h primary " + trim(primaryUsed) + "% | 1w secondary " + trim(secondaryUsed) + "%";
+      dollars(today.cost, false) + " | 5h primary " + wholePercent(primaryUsed) + "% | 1w secondary " + wholePercent(secondaryUsed) + "%";
     updateMenu(root, last7, today, last30, month);
   } catch (error) {
     setStatusTitle("Codex offline", false, 0, 0, 0, 0, 0, 0);
