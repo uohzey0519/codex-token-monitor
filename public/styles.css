@@ -130,7 +130,7 @@ small,
 
 .controls {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 10px;
 }
 
@@ -139,6 +139,7 @@ small,
   gap: 5px;
   color: var(--muted);
   font-size: 12px;
+  line-height: 1;
 }
 
 select,
@@ -203,12 +204,21 @@ select:hover {
 
 .status-strip {
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  padding: 15px;
+  margin-top: 4px;
+}
+
+.status-strip div {
+  display: grid;
+  min-height: 94px;
+  align-content: space-between;
+  gap: 9px;
+  min-width: 0;
+  padding: 15px 16px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.76), rgba(255, 255, 255, 0.46)),
-    rgba(255, 255, 255, 0.58);
+    linear-gradient(145deg, rgba(255, 255, 255, 0.84), rgba(255, 255, 255, 0.52)),
+    var(--paper);
   box-shadow: var(--shadow);
   backdrop-filter: var(--blur);
   transition:
@@ -218,16 +228,34 @@ select:hover {
     background 180ms ease;
 }
 
-.status-strip:hover {
-  transform: translateY(-2px) scale(1.006);
-  border-color: var(--line-strong);
-  box-shadow: var(--shadow-hover);
+.status-strip div:nth-child(1) {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--mint) 16%, transparent), transparent 62%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.84), rgba(255, 255, 255, 0.52));
 }
 
-.status-strip div {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
+.status-strip div:nth-child(2) {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--peach) 18%, transparent), transparent 62%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.84), rgba(255, 255, 255, 0.52));
+}
+
+.status-strip div:nth-child(3) {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--sky) 16%, transparent), transparent 62%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.84), rgba(255, 255, 255, 0.52));
+}
+
+.status-strip div:nth-child(4) {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--lavender) 16%, transparent), transparent 62%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.84), rgba(255, 255, 255, 0.52));
+}
+
+.status-strip div:hover {
+  transform: translateY(-3px) scale(1.012);
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-hover);
 }
 
 .status-strip strong {
