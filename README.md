@@ -1,27 +1,42 @@
 # Codex Token Monitor
 
-A local Codex usage monitor for `~/.codex/sessions`.
+一个本地运行的 Codex token 用量监控器，读取 `~/.codex/sessions` 里的 session JSONL，展示 token、缓存命中、估算费用和额度窗口。
 
-It includes a web dashboard and a tiny macOS menu bar item. Everything runs on
-`127.0.0.1`; session data is read locally and is not uploaded anywhere.
+它包含两部分：
 
-## Features
+- Web Dashboard：本地网页看长期趋势和明细
+- macOS Menu Bar：顶部菜单栏显示今天的估算费用和 total tokens
 
-- Daily, monthly, recent-window, and all-time token totals
-- Estimated cost by pricing model, including cached input tokens
-- Event-time accounting, so usage is grouped by when tokens were spent rather
-  than by when a session file was created
-- macOS menu bar display for today's estimated cost and total tokens
-- Menu bar text color changes with the 5-hour primary usage window
-- LaunchAgent install/uninstall scripts for start-on-login behavior
+所有数据默认只在本机读取和展示，HTTP 服务绑定在 `127.0.0.1`。
 
-## Requirements
+## 截图
+
+### Dashboard
+
+![Codex Token Monitor Dashboard](docs/images/dashboard.png)
+
+### macOS Menu Bar
+
+![Codex Token Monitor Menu Bar](docs/images/menu-bar.png)
+
+## 功能
+
+- 按今天、近 7 天、近 30 天、本月、全部统计 token
+- 估算输入、缓存输入、输出 token 的费用
+- 使用事件时间归因，避免按 session 创建日期误算每日用量
+- 展示 cache hit rate、reasoning output tokens、活跃 session 数
+- 展示 5h primary 和 7d secondary 额度窗口
+- macOS 菜单栏实时显示今日估算费用和 total tokens
+- 菜单栏文字按 5h primary 使用率从薄荷绿渐变到玫红
+- 支持 LaunchAgent，开机后自动启动 dashboard 和菜单栏
+
+## 环境要求
 
 - macOS
 - Node.js 20+
-- Codex session files under `~/.codex/sessions`
+- Codex session 文件位于 `~/.codex/sessions`
 
-## Install
+## 一键安装
 
 ```bash
 git clone https://github.com/uohzey-ai/codex-token-monitor.git
@@ -29,42 +44,40 @@ cd codex-token-monitor
 npm run install:macos
 ```
 
-Open the dashboard:
+打开 Dashboard：
 
 ```text
 http://127.0.0.1:48731
 ```
 
-The installer writes two LaunchAgents:
+安装脚本会写入两个 LaunchAgent：
 
-- `ai.codex.token-monitor`: local HTTP dashboard/API
-- `ai.codex.token-menubar`: macOS menu bar helper
+- `ai.codex.token-monitor`：本地 HTTP dashboard/API
+- `ai.codex.token-menubar`：macOS menu bar helper
 
-## Menu Bar
+## Menu Bar 显示
 
-The menu bar item shows:
-
-```text
-$today_estimated_cost / today_total_tokens
-```
-
-By default it estimates with `gpt-5.5`. The text color follows the latest
-5-hour primary window usage:
+菜单栏默认显示：
 
 ```text
-mint -> honey -> peach -> rose
+$今日估算费用 / 今日 total tokens
 ```
 
-To choose another model at install time:
+默认按 `gpt-5.5` 估算费用。颜色使用 5h primary 额度窗口：
+
+```text
+薄荷绿 -> 蜂蜜黄 -> 蜜桃橙 -> 玫红
+```
+
+如果想换成别的模型，例如 `gpt-5.4`：
 
 ```bash
 CODEX_TOKEN_MENU_MODEL=gpt-5.4 npm run install:macos
 ```
 
-## Configuration
+## 配置
 
-These environment variables are captured into the LaunchAgent plist during
-installation:
+安装时会把这些环境变量写入 LaunchAgent：
 
 ```bash
 HOST=127.0.0.1
@@ -73,30 +86,35 @@ CODEX_SESSIONS_ROOT="$HOME/.codex/sessions"
 CODEX_TOKEN_MENU_MODEL=gpt-5.5
 ```
 
-Example:
+例如换端口和菜单栏估算模型：
 
 ```bash
 PORT=49888 CODEX_TOKEN_MENU_MODEL=gpt-5.4 npm run install:macos
 ```
 
-## Commands
+## 常用命令
 
 ```bash
-npm start                  # run the local dashboard in the foreground
-npm run install:macos      # install and start LaunchAgents
-npm run uninstall:macos    # stop and remove LaunchAgents
-npm run status:macos       # show LaunchAgent status
-npm run check              # syntax-check server and menu bar helper
+npm start                  # 前台运行 dashboard
+npm run install:macos      # 安装并启动 LaunchAgents
+npm run uninstall:macos    # 停止并移除 LaunchAgents
+npm run status:macos       # 查看 LaunchAgent 状态
+npm run check              # 检查 server 和 menu bar helper 语法
 ```
 
-## Privacy
+## 卸载
 
-The app reads local JSONL files from your Codex sessions directory. It exposes
-only a local HTTP server bound to `127.0.0.1` by default.
+```bash
+npm run uninstall:macos
+```
 
-Cost numbers are estimates. They use the pricing table embedded in
-`server.js`, and session logs may not always expose the exact model used for
-each request.
+卸载只会移除 LaunchAgent，不会删除你的 session 文件，也不会删除本仓库。
+
+## 隐私说明
+
+本工具读取本机 Codex session JSONL 文件，默认只启动绑定在 `127.0.0.1` 的本地 HTTP 服务，不会上传 session 数据。
+
+费用只是估算值。当前实现使用 `server.js` 里的价格表，并按 session 中记录的输入、缓存输入、输出 token 计算；如果 session 没有精确模型信息，Dashboard 会使用你在界面中选择的模型估算。
 
 ## License
 
