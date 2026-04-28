@@ -30,6 +30,7 @@
 - 使用事件时间归因，避免按 session 创建日期误算每日用量
 - 展示 cache hit rate、reasoning output tokens、活跃 session 数
 - 展示 5h primary 和 1w secondary 额度窗口峰值、快照年龄和重置剩余时间
+- 默认只展示 `limit_id=codex` 的主额度，避免模型专属 quota bucket 混入主窗口
 - macOS 菜单栏显示今日估算费用、total tokens、5h 和 1w 用量
 - 菜单栏 quota 文字按 5h primary / 1w secondary 使用率从薄荷绿渐变到玫红
 - 支持 LaunchAgent，开机后自动启动 dashboard 和菜单栏
@@ -85,7 +86,7 @@ $70/85.7M/84%/54%
 
 Dashboard 和菜单栏默认每 10 秒读取一次本地 API，服务端扫描缓存默认是 2.5 秒。`total tokens`、缓存命中和预估费用来自 session 里的 `token_count.info.total_token_usage`，通常会随着当前 working turn 的 session 写入持续更新。
 
-额度窗口不是本工具本地实时推算出来的余额，而是 Codex 写入 session 的 `token_count.rate_limits` 快照。working 期间 session 文件可能一直在写 token 用量，但 `rate_limits.used_percent` 不一定每次同步变化，常见情况是要等当前 turn 结束或后端某次 checkpoint 后才写入新的 5h / 1w 快照。因此额度百分比可能滞后几十秒到约一分钟；Dashboard 上的“本地快照 · Ns 前”表示本工具读到的最新 quota 快照时间。
+额度窗口不是本工具本地实时推算出来的余额，而是 Codex 写入 session 的 `token_count.rate_limits` 快照。working 期间 session 文件可能一直在写 token 用量，但 `rate_limits.used_percent` 不一定每次同步变化，常见情况是要等当前 turn 结束或后端某次 checkpoint 后才写入新的 5h / 1w 快照。因此额度百分比可能滞后几十秒到约一分钟；Dashboard 上的“本地快照 · Ns 前”表示本工具读到的最新 quota 快照时间。为了避免多个 session 之间只取最新文件导致低估，Dashboard 和菜单栏会先按 `limit_id` 分桶，默认取 `codex` 主额度，再对同一个 `resets_at` 窗口内的快照取峰值。其他模型专属额度桶会保留在 API 的 `rateLimitBuckets` 诊断字段里。
 
 如果想换成别的模型，例如 `gpt-5.4`：
 

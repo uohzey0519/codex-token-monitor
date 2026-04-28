@@ -172,7 +172,7 @@ function renderRate() {
 
   setText(
     "rateContext",
-    `${rate.plan_type || "unknown plan"} · 本地快照 · ${snapshotAge}`
+    `${rate.limit_id || latest.selectedLimitId || "unknown limit"} · ${rate.plan_type || "unknown plan"} · 本地快照 · ${snapshotAge}`
   );
   setText("primaryLabel", windowLabel(primary.window_minutes, "primary"));
   setText("secondaryLabel", windowLabel(secondary.window_minutes, "secondary"));

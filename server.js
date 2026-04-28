@@ -14,6 +14,7 @@ const SESSIONS_ROOT =
 const PUBLIC_DIR = path.join(__dirname, "public");
 const SHANGHAI_OFFSET_MS = 8 * 60 * 60 * 1000;
 const CACHE_TTL_MS = Number(process.env.CACHE_TTL_MS || 2500);
+const DEFAULT_RATE_LIMIT_ID = process.env.CODEX_RATE_LIMIT_ID || "codex";
 
 const pricing = [
   {
@@ -385,6 +386,122 @@ function costFor(total, model) {
   };
 }
 
+function rateLimitId(rate = {}) {
+  return rate.limit_id || "unknown";
+}
+
+function newestRateEvent(events) {
+  return [...events]
+    .filter((event) => event.rate)
+    .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))[0] || null;
+}
+
+function maxUsedPercent(events, windowName) {
+  if (!events.length) return 0;
+  return Math.max(
+    ...events.map((event) => Number(event.rate?.[windowName]?.used_percent || 0))
+  );
+}
+
+function summarizeRateLimitBucket(events, preferredLimitId = DEFAULT_RATE_LIMIT_ID) {
+  const bucketEvents = events.filter((event) => event.rate);
+  if (!bucketEvents.length) return null;
+
+  const preferredEvents = bucketEvents.filter(
+    (event) => rateLimitId(event.rate) === preferredLimitId
+  );
+  const selectedEvents = preferredEvents.length ? preferredEvents : bucketEvents;
+  const latestRateEvent = newestRateEvent(selectedEvents);
+  if (!latestRateEvent) return null;
+
+  const selectedLimitId = rateLimitId(latestRateEvent.rate);
+  const latestPrimaryReset = latestRateEvent.rate.primary?.resets_at ?? null;
+  const latestSecondaryReset = latestRateEvent.rate.secondary?.resets_at ?? null;
+  const sameBucketEvents = bucketEvents.filter(
+    (event) => rateLimitId(event.rate) === selectedLimitId
+  );
+  const samePrimaryWindow = sameBucketEvents.filter(
+    (event) => event.rate?.primary?.resets_at === latestPrimaryReset
+  );
+  const sameSecondaryWindow = sameBucketEvents.filter(
+    (event) => event.rate?.secondary?.resets_at === latestSecondaryReset
+  );
+  const primaryMax = maxUsedPercent(samePrimaryWindow, "primary");
+  const secondaryMax = maxUsedPercent(sameSecondaryWindow, "secondary");
+
+  return {
+    day: latestRateEvent.day || latestRateEvent.sessionDay,
+    file: latestRateEvent.file,
+    timestamp: latestRateEvent.timestamp,
+    source: "session token_count.rate_limits",
+    preferredLimitId,
+    selectedLimitId,
+    observedAgeSeconds: latestRateEvent.timestamp
+      ? Math.max(0, Math.round((Date.now() - new Date(latestRateEvent.timestamp).getTime()) / 1000))
+      : null,
+    primaryUsed: primaryMax,
+    secondaryUsed: secondaryMax,
+    primaryLatestUsed: Number(latestRateEvent.rate.primary?.used_percent || 0),
+    secondaryLatestUsed: Number(latestRateEvent.rate.secondary?.used_percent || 0),
+    maxPrimaryUsed: primaryMax,
+    maxSecondaryUsed: secondaryMax,
+    primarySamples: samePrimaryWindow.length,
+    secondarySamples: sameSecondaryWindow.length,
+    rateLimits: latestRateEvent.rate
+  };
+}
+
+function summarizeRateLimitBuckets(events) {
+  const groups = new Map();
+  for (const event of events) {
+    if (!event.rate) continue;
+    const id = rateLimitId(event.rate);
+    if (!groups.has(id)) groups.set(id, []);
+    groups.get(id).push(event);
+  }
+
+  return [...groups.entries()]
+    .map(([limitId, bucketEvents]) => {
+      const latest = newestRateEvent(bucketEvents);
+      if (!latest) return null;
+      const latestPrimaryReset = latest.rate.primary?.resets_at ?? null;
+      const latestSecondaryReset = latest.rate.secondary?.resets_at ?? null;
+      const samePrimaryWindow = bucketEvents.filter(
+        (event) => event.rate?.primary?.resets_at === latestPrimaryReset
+      );
+      const sameSecondaryWindow = bucketEvents.filter(
+        (event) => event.rate?.secondary?.resets_at === latestSecondaryReset
+      );
+      return {
+        limitId,
+        limitName: latest.rate.limit_name || null,
+        planType: latest.rate.plan_type || null,
+        latestFile: latest.file,
+        latestTimestamp: latest.timestamp,
+        primary: {
+          windowMinutes: latest.rate.primary?.window_minutes ?? null,
+          resetsAt: latestPrimaryReset,
+          latestUsed: Number(latest.rate.primary?.used_percent || 0),
+          maxUsed: maxUsedPercent(samePrimaryWindow, "primary"),
+          samples: samePrimaryWindow.length
+        },
+        secondary: {
+          windowMinutes: latest.rate.secondary?.window_minutes ?? null,
+          resetsAt: latestSecondaryReset,
+          latestUsed: Number(latest.rate.secondary?.used_percent || 0),
+          maxUsed: maxUsedPercent(sameSecondaryWindow, "secondary"),
+          samples: sameSecondaryWindow.length
+        }
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => {
+      if (a.limitId === DEFAULT_RATE_LIMIT_ID) return -1;
+      if (b.limitId === DEFAULT_RATE_LIMIT_ID) return 1;
+      return new Date(b.latestTimestamp || 0) - new Date(a.latestTimestamp || 0);
+    });
+}
+
 function buildScan() {
   const startedAt = Date.now();
   const files = walkJsonl(SESSIONS_ROOT).sort();
@@ -530,44 +647,8 @@ function buildScan() {
     .filter((day) => day.day >= addDays(today, -30) && day.sessions > 0)
     .slice(-31);
 
-  const latestRateEvent = [...rateEvents]
-    .filter((event) => event.rate)
-    .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))[0];
-  let latestRate = null;
-  if (latestRateEvent) {
-    const latestPrimaryReset = latestRateEvent.rate.primary?.resets_at ?? null;
-    const latestSecondaryReset = latestRateEvent.rate.secondary?.resets_at ?? null;
-    const samePrimaryWindow = rateEvents.filter(
-      (event) => event.rate?.primary?.resets_at === latestPrimaryReset
-    );
-    const sameSecondaryWindow = rateEvents.filter(
-      (event) => event.rate?.secondary?.resets_at === latestSecondaryReset
-    );
-    const primaryMax = Math.max(
-      ...samePrimaryWindow.map((event) => Number(event.rate?.primary?.used_percent || 0))
-    );
-    const secondaryMax = Math.max(
-      ...sameSecondaryWindow.map((event) => Number(event.rate?.secondary?.used_percent || 0))
-    );
-    latestRate = {
-      day: latestRateEvent.day || latestRateEvent.sessionDay,
-      file: latestRateEvent.file,
-      timestamp: latestRateEvent.timestamp,
-      source: "session token_count.rate_limits",
-      observedAgeSeconds: latestRateEvent.timestamp
-        ? Math.max(0, Math.round((Date.now() - new Date(latestRateEvent.timestamp).getTime()) / 1000))
-        : null,
-      primaryUsed: primaryMax,
-      secondaryUsed: secondaryMax,
-      primaryLatestUsed: Number(latestRateEvent.rate.primary?.used_percent || 0),
-      secondaryLatestUsed: Number(latestRateEvent.rate.secondary?.used_percent || 0),
-      maxPrimaryUsed: primaryMax,
-      maxSecondaryUsed: secondaryMax,
-      primarySamples: samePrimaryWindow.length,
-      secondarySamples: sameSecondaryWindow.length,
-      rateLimits: latestRateEvent.rate
-    };
-  }
+  const latestRate = summarizeRateLimitBucket(rateEvents);
+  const rateLimitBuckets = summarizeRateLimitBuckets(rateEvents);
 
   const costs = {};
   for (const [rangeName, total] of Object.entries(ranges)) {
@@ -600,6 +681,7 @@ function buildScan() {
     topDays,
     topSessions,
     recentDays,
+    rateLimitBuckets,
     latestRate
   };
 }
